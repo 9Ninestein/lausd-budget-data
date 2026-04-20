@@ -122,17 +122,31 @@ def fetch_with_requests() -> list[tuple[str, str]]:
 def download_pdf(url: str, dest: Path) -> bool:
     import requests
 
+    tmp = dest.with_suffix(".tmp")
     try:
         session = requests.Session()
         response = session.get(url, headers=HEADERS, timeout=60, stream=True)
         response.raise_for_status()
-        with open(dest, "wb") as f:
+
+        with open(tmp, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
+
+        # Verify the file is actually a PDF (starts with %PDF magic bytes)
+        with open(tmp, "rb") as f:
+            header = f.read(5)
+        if header != b"%PDF-":
+            tmp.unlink(missing_ok=True)
+            print(f"  ERROR: server did not return a valid PDF (got HTML/error page instead)")
+            print(f"  This URL may require a logged-in session or has additional access restrictions.")
+            return False
+
+        tmp.rename(dest)
         size_kb = dest.stat().st_size / 1024
         print(f"  Saved {dest.name} ({size_kb:.1f} KB)")
         return True
     except Exception as e:
+        tmp.unlink(missing_ok=True)
         print(f"  ERROR: {e}")
         return False
 
@@ -179,9 +193,16 @@ def main():
     for i, (url, filename) in enumerate(pdf_links, 1):
         dest = OUTPUT_DIR / filename
         if dest.exists():
-            print(f"[{i}/{len(pdf_links)}] Skipping (exists): {filename}")
-            success += 1
-            continue
+            # Skip only if it's a valid PDF; re-download if it was a bad file
+            with open(dest, "rb") as f:
+                header = f.read(5)
+            if header == b"%PDF-":
+                print(f"[{i}/{len(pdf_links)}] Skipping (exists): {filename}")
+                success += 1
+                continue
+            else:
+                print(f"[{i}/{len(pdf_links)}] Re-downloading (previously corrupt): {filename}")
+                dest.unlink()
         print(f"[{i}/{len(pdf_links)}] {filename}")
         print(f"  {url}")
         if download_pdf(url, dest):
