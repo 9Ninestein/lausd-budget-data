@@ -62,7 +62,9 @@ def run(output_dir: Path) -> None:
     output_dir.mkdir(exist_ok=True)
 
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        # headless=False opens a visible browser window, which bypasses
+        # Cloudflare's bot detection (it blocks invisible/automated browsers)
+        browser = pw.chromium.launch(headless=False)
         context = browser.new_context(accept_downloads=True)
 
         # Step 1: load the index page to establish session/cookies
