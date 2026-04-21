@@ -69,11 +69,26 @@ def run(output_dir: Path) -> None:
         print(f"Opening index page...")
         page = context.new_page()
         page.goto(PAGE_URL, wait_until="networkidle", timeout=30000)
-        html = page.content()
 
-        pdf_links = pdf_links_from_html(html)
+        # Collect HTML from the main page and all iframes
+        frames = [page.main_frame] + page.frames
+        all_html = []
+        for frame in frames:
+            try:
+                all_html.append(frame.content())
+            except Exception:
+                pass
+        combined_html = "\n".join(all_html)
+
+        # Save debug HTML so you can inspect what the browser actually sees
+        debug_file = Path("page_debug.html")
+        debug_file.write_text(combined_html, encoding="utf-8")
+        print(f"  (Page HTML saved to {debug_file} for inspection)")
+
+        pdf_links = pdf_links_from_html(combined_html)
         if not pdf_links:
             print("No PDF links found on the page.")
+            print(f"Open {debug_file} in a browser to see what was loaded.")
             browser.close()
             sys.exit(1)
 
