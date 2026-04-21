@@ -5,12 +5,9 @@ URL: https://treasury.lausd.org/apps/pages/index.jsp?uREC_ID=4417350&type=d&pREC
 
 Requirements:
     pip install playwright beautifulsoup4 requests
-    playwright install chromium
-
-If playwright is unavailable, falls back to requests (may be blocked by WAF on cloud IPs).
+    python -m playwright install chromium
 """
 
-import os
 import re
 import sys
 import time
@@ -20,19 +17,6 @@ from pathlib import Path
 PAGE_URL = "https://treasury.lausd.org/apps/pages/index.jsp?uREC_ID=4417350&type=d&pREC_ID=2650401"
 BASE_URL = "https://treasury.lausd.org"
 OUTPUT_DIR = Path("pdfs")
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Connection": "keep-alive",
-    "Upgrade-Insecure-Requests": "1",
-}
 
 
 def sanitize_filename(name: str) -> str:
@@ -72,145 +56,93 @@ def pdf_links_from_html(html: str) -> list[tuple[str, str]]:
     return results
 
 
-# ---------------------------------------------------------------------------
-# Strategy 1: Playwright (real Chromium browser — bypasses most WAFs)
-# ---------------------------------------------------------------------------
-
-def fetch_with_playwright() -> list[tuple[str, str]]:
+def run(output_dir: Path) -> None:
     from playwright.sync_api import sync_playwright
 
-    print("Using Playwright (Chromium) to fetch the page...")
+    output_dir.mkdir(exist_ok=True)
+
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent=HEADERS["User-Agent"],
-            locale="en-US",
-        )
+        context = browser.new_context(accept_downloads=True)
+
+        # Step 1: load the index page to establish session/cookies
+        print(f"Opening index page...")
         page = context.new_page()
         page.goto(PAGE_URL, wait_until="networkidle", timeout=30000)
         html = page.content()
-        browser.close()
 
-    return pdf_links_from_html(html)
-
-
-# ---------------------------------------------------------------------------
-# Strategy 2: requests + BeautifulSoup (works if IP is not blocked)
-# ---------------------------------------------------------------------------
-
-def fetch_with_requests() -> list[tuple[str, str]]:
-    import requests
-
-    print("Using requests to fetch the page...")
-    session = requests.Session()
-    # Warm up with base domain to collect cookies
-    try:
-        session.get(BASE_URL, headers=HEADERS, timeout=15)
-        time.sleep(0.5)
-    except Exception:
-        pass
-
-    response = session.get(PAGE_URL, headers={**HEADERS, "Referer": BASE_URL}, timeout=30)
-    response.raise_for_status()
-    return pdf_links_from_html(response.text)
-
-
-# ---------------------------------------------------------------------------
-# Downloader
-# ---------------------------------------------------------------------------
-
-def download_pdf(url: str, dest: Path) -> bool:
-    import requests
-
-    tmp = dest.with_suffix(".tmp")
-    try:
-        session = requests.Session()
-        response = session.get(url, headers=HEADERS, timeout=60, stream=True)
-        response.raise_for_status()
-
-        with open(tmp, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        # Verify the file is actually a PDF (starts with %PDF magic bytes)
-        with open(tmp, "rb") as f:
-            header = f.read(5)
-        if header != b"%PDF-":
-            tmp.unlink(missing_ok=True)
-            print(f"  ERROR: server did not return a valid PDF (got HTML/error page instead)")
-            print(f"  This URL may require a logged-in session or has additional access restrictions.")
-            return False
-
-        tmp.rename(dest)
-        size_kb = dest.stat().st_size / 1024
-        print(f"  Saved {dest.name} ({size_kb:.1f} KB)")
-        return True
-    except Exception as e:
-        tmp.unlink(missing_ok=True)
-        print(f"  ERROR: {e}")
-        return False
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-def main():
-    OUTPUT_DIR.mkdir(exist_ok=True)
-
-    # Try Playwright first, fall back to requests
-    pdf_links: list[tuple[str, str]] = []
-    try:
-        import playwright  # noqa: F401
-        pdf_links = fetch_with_playwright()
-    except ImportError:
-        print("playwright not installed; falling back to requests.")
-        print("  To install: pip install playwright && playwright install chromium\n")
-        try:
-            pdf_links = fetch_with_requests()
-        except Exception as e:
-            print(f"requests also failed: {e}")
-            print("\nThe site appears to block automated access from this IP.")
-            print("Run this script from your local machine (not a cloud server).")
-            sys.exit(1)
-    except Exception as e:
-        print(f"Playwright failed ({e}); falling back to requests.")
-        try:
-            pdf_links = fetch_with_requests()
-        except Exception as e2:
-            print(f"requests also failed: {e2}")
-            print("\nThe site appears to block automated access from this IP.")
-            print("Run this script from your local machine (not a cloud server).")
+        pdf_links = pdf_links_from_html(html)
+        if not pdf_links:
+            print("No PDF links found on the page.")
+            browser.close()
             sys.exit(1)
 
-    if not pdf_links:
-        print("No PDF links found on the page.")
-        sys.exit(1)
+        print(f"Found {len(pdf_links)} PDF(s). Downloading to ./{output_dir}/\n")
 
-    print(f"\nFound {len(pdf_links)} PDF(s). Downloading to ./{OUTPUT_DIR}/\n")
+        success, failed = 0, 0
+        for i, (url, filename) in enumerate(pdf_links, 1):
+            dest = output_dir / filename
 
-    success, failed = 0, 0
-    for i, (url, filename) in enumerate(pdf_links, 1):
-        dest = OUTPUT_DIR / filename
-        if dest.exists():
-            # Skip only if it's a valid PDF; re-download if it was a bad file
-            with open(dest, "rb") as f:
-                header = f.read(5)
-            if header == b"%PDF-":
-                print(f"[{i}/{len(pdf_links)}] Skipping (exists): {filename}")
+            # Skip already-downloaded valid PDFs
+            if dest.exists():
+                with open(dest, "rb") as f:
+                    magic = f.read(5)
+                if magic == b"%PDF-":
+                    print(f"[{i}/{len(pdf_links)}] Skipping (exists): {filename}")
+                    success += 1
+                    continue
+                else:
+                    print(f"[{i}/{len(pdf_links)}] Re-downloading (previously corrupt): {filename}")
+                    dest.unlink()
+
+            print(f"[{i}/{len(pdf_links)}] {filename}")
+            print(f"  {url}")
+
+            tmp = dest.with_suffix(".tmp")
+            try:
+                # Navigate to the PDF URL inside the same browser session.
+                # Intercept the response to capture the raw bytes — this keeps
+                # all session cookies and browser headers intact, which is why
+                # it succeeds where a plain HTTP download would be blocked.
+                pdf_bytes: bytes | None = None
+
+                def handle_response(response):
+                    nonlocal pdf_bytes
+                    if response.url == url and response.status == 200:
+                        try:
+                            pdf_bytes = response.body()
+                        except Exception:
+                            pass
+
+                pdf_page = context.new_page()
+                pdf_page.on("response", handle_response)
+                pdf_page.goto(url, wait_until="load", timeout=60000)
+                pdf_page.close()
+
+                if not pdf_bytes:
+                    print(f"  ERROR: no response body captured.")
+                    failed += 1
+                    continue
+
+                if not pdf_bytes.startswith(b"%PDF-"):
+                    print(f"  ERROR: server returned HTML/error page instead of a PDF.")
+                    failed += 1
+                    continue
+
+                tmp.write_bytes(pdf_bytes)
+                tmp.rename(dest)
+                print(f"  Saved {dest.name} ({dest.stat().st_size / 1024:.1f} KB)")
                 success += 1
-                continue
-            else:
-                print(f"[{i}/{len(pdf_links)}] Re-downloading (previously corrupt): {filename}")
-                dest.unlink()
-        print(f"[{i}/{len(pdf_links)}] {filename}")
-        print(f"  {url}")
-        if download_pdf(url, dest):
-            success += 1
-        else:
-            failed += 1
-        if i < len(pdf_links):
-            time.sleep(0.5)
+
+            except Exception as e:
+                tmp.unlink(missing_ok=True)
+                print(f"  ERROR: {e}")
+                failed += 1
+
+            if i < len(pdf_links):
+                time.sleep(0.3)
+
+        browser.close()
 
     print(f"\nDone. {success} downloaded, {failed} failed.")
     if failed:
@@ -218,4 +150,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    run(OUTPUT_DIR)
