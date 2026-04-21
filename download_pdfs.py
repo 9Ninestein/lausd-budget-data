@@ -8,6 +8,7 @@ Requirements:
     python -m playwright install chromium
 """
 
+import random
 import re
 import sys
 import time
@@ -62,15 +63,27 @@ def run(output_dir: Path) -> None:
     output_dir.mkdir(exist_ok=True)
 
     with sync_playwright() as pw:
-        # headless=False opens a visible browser window, which bypasses
-        # Cloudflare's bot detection (it blocks invisible/automated browsers)
-        browser = pw.chromium.launch(headless=False)
+        browser = pw.chromium.launch(
+            headless=False,
+            slow_mo=80,  # slow every browser action by 80ms to appear more human
+        )
         context = browser.new_context(accept_downloads=True)
 
-        # Step 1: load the index page to establish session/cookies
-        print(f"Opening index page...")
+        # Step 1: load the index page
+        print("Opening index page in browser window...")
+        print("If you see a Cloudflare challenge or CAPTCHA, solve it manually.")
+        print("The script will wait for you.\n")
         page = context.new_page()
-        page.goto(PAGE_URL, wait_until="networkidle", timeout=30000)
+        page.goto(PAGE_URL, wait_until="networkidle", timeout=60000)
+
+        # Scroll slowly down the page to mimic a human reading it
+        page.mouse.wheel(0, 300)
+        time.sleep(2)
+        page.mouse.wheel(0, 300)
+        time.sleep(1)
+
+        # Pause so the user can confirm the page looks right / solve any CAPTCHA
+        input("Press Enter once the page has fully loaded in the browser window...")
 
         # Collect HTML from the main page and all iframes
         frames = [page.main_frame] + page.frames
@@ -82,7 +95,7 @@ def run(output_dir: Path) -> None:
                 pass
         combined_html = "\n".join(all_html)
 
-        # Save debug HTML so you can inspect what the browser actually sees
+        # Save debug HTML for inspection
         debug_file = Path("page_debug.html")
         debug_file.write_text(combined_html, encoding="utf-8")
         print(f"  (Page HTML saved to {debug_file} for inspection)")
@@ -90,7 +103,7 @@ def run(output_dir: Path) -> None:
         pdf_links = pdf_links_from_html(combined_html)
         if not pdf_links:
             print("No PDF links found on the page.")
-            print(f"Open {debug_file} in a browser to see what was loaded.")
+            print(f"Open {debug_file} in a text editor and search for '.pdf' to see what's there.")
             browser.close()
             sys.exit(1)
 
@@ -157,7 +170,9 @@ def run(output_dir: Path) -> None:
                 failed += 1
 
             if i < len(pdf_links):
-                time.sleep(0.3)
+                delay = random.uniform(3, 7)
+                print(f"  Waiting {delay:.1f}s before next download...")
+                time.sleep(delay)
 
         browser.close()
 
