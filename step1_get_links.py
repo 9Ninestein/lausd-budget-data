@@ -48,19 +48,20 @@ def main():
 
         browser.close()
 
-    # Filter to PDF links only
+    # Filter to PDF links only — deduplicate by URL but keep every unique URL
     pdf_links = []
-    seen = set()
+    seen_urls = set()
     for link in links:
         href = link.get("href", "")
         if not re.search(r"\.pdf(\?|#|$)", href, re.IGNORECASE):
             continue
         full_url = urllib.parse.urljoin(BASE_URL, href)
-        if full_url in seen:
+        if full_url in seen_urls:
             continue
-        seen.add(full_url)
+        seen_urls.add(full_url)
         text = re.sub(r"\s+", " ", link.get("text", "")).strip()
         pdf_links.append({"url": full_url, "text": text})
+        print(f"  Found: {text or '(no text)'} → {full_url}")
 
     if not pdf_links:
         print("No PDF links found. Check that the page loaded correctly and try again.")

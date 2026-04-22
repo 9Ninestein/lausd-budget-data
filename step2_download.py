@@ -49,19 +49,30 @@ def main():
 
     session = requests.Session()
     success, failed = 0, 0
+    used_filenames: set[str] = set()  # track names assigned this run to avoid collisions
 
     for i, row in enumerate(rows, 1):
         url  = row["url"]
         text = row.get("text", "")
 
-        # Derive filename from link text, falling back to the URL filename
+        # Prefer the URL filename; fall back to link text; last resort: index
         url_name = url.rsplit("/", 1)[-1].split("?")[0]
-        if text:
-            filename = sanitize(text) + ".pdf"
-        elif url_name.lower().endswith(".pdf"):
-            filename = sanitize(url_name)
+        if url_name.lower().endswith(".pdf"):
+            base = sanitize(url_name[:-4])  # strip .pdf, re-add below
+        elif text:
+            base = sanitize(text)
         else:
-            filename = f"document_{i}.pdf"
+            base = f"document_{i}"
+
+        # Resolve collisions: if this base name was already used this run,
+        # append a counter so nothing gets silently overwritten
+        candidate = base + ".pdf"
+        counter = 2
+        while candidate in used_filenames:
+            candidate = f"{base}_({counter}).pdf"
+            counter += 1
+        filename = candidate
+        used_filenames.add(filename)
 
         dest = OUTPUT_DIR / filename
         tmp  = dest.with_suffix(".tmp")
