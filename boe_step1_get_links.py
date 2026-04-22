@@ -69,7 +69,8 @@ def main():
         meeting_links: list[dict] = []
         page_num = 1
         while True:
-            meetings = find_links_by_text(page, r"regular board meeting")
+            meetings = [a for a in all_anchors(page)
+                    if all(w in a.get("text","").lower() for w in ("regular","board","meeting"))]
             print(f"  Events page {page_num}: found {len(meetings)} Regular Board Meeting link(s)")
             meeting_links.extend(meetings)
 

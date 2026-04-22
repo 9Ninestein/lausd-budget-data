@@ -55,6 +55,12 @@ def anchors_matching(page, pattern: str) -> list[dict]:
             if re.search(pattern, a.get("text", ""), re.IGNORECASE)]
 
 
+def is_board_meeting_link(text: str) -> bool:
+    """Return True if text contains 'regular', 'board', and 'meeting' in any order."""
+    t = text.lower()
+    return all(word in t for word in ("regular", "board", "meeting"))
+
+
 def parse_date_from_text(text: str) -> str | None:
     """Try to extract a date string (YYYY-MM-DD) from meeting link text."""
     patterns = [
@@ -140,7 +146,7 @@ def main():
                     print(f"  [{month_label}] ERROR loading page: {e}")
                     continue
 
-            meetings = anchors_matching(page, r"regular board meeting")
+            meetings = [a for a in all_anchors(page) if is_board_meeting_link(a.get("text", ""))]
             if not meetings:
                 print(f"  [{month_label}] No Regular Board Meeting links.")
                 continue
