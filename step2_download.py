@@ -41,13 +41,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", default=str(INPUT_CSV), help="Path to the links CSV file")
     args = parser.parse_args()
-    INPUT_CSV = Path(args.csv)
+    input_csv = Path(args.csv)
 
-    if not INPUT_CSV.exists():
-        print(f"{INPUT_CSV} not found. Run the appropriate step1 script first.")
+    if not input_csv.exists():
+        print(f"{input_csv} not found. Run the appropriate step1 script first.")
         sys.exit(1)
 
-    with open(INPUT_CSV, newline="", encoding="utf-8") as f:
+    with open(input_csv, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
 
     if not rows:
