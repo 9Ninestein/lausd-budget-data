@@ -167,14 +167,15 @@ def main():
                     time.sleep(DELAY)
                 except Exception as e:
                     print(f"    ERROR loading meeting page: {e}")
-                    page.go_back(timeout=10000)
+                    page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                    time.sleep(DELAY)
                     continue
 
                 materials_links = anchors_matching(page, r"\bmaterials\b")
                 if not materials_links:
                     print(f"    {date_str}: no Materials link found.")
-                    page.go_back(timeout=10000)
-                    time.sleep(1)
+                    page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                    time.sleep(DELAY)
                     continue
 
                 for mat in materials_links:
@@ -216,13 +217,13 @@ def main():
                                 total_found += 1
                             if not pdf_anchors:
                                 print(f"    {date_str}: no PDFs on Materials page.")
-                            page.go_back(timeout=10000)
-                            time.sleep(1)
+                            page.goto(meeting_url, wait_until="networkidle", timeout=30000)
+                            time.sleep(DELAY)
                         except Exception as e:
                             print(f"    ERROR on Materials page: {e}")
 
-                page.go_back(timeout=10000)
-                time.sleep(1)
+                page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                time.sleep(DELAY)
 
         csv_file.close()
         browser.close()
