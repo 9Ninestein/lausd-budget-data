@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.tmp
+pdfs/
+boe_links.csv
+links.csv
+page_debug.html
