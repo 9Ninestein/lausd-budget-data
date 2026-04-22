@@ -125,7 +125,13 @@ def main():
         print()
 
         # Open CSV for writing (incremental saves)
-        csv_file = open(OUTPUT_CSV, "w", newline="", encoding="utf-8")
+        try:
+            csv_file = open(OUTPUT_CSV, "w", newline="", encoding="utf-8")
+        except PermissionError:
+            print(f"\nERROR: Cannot write to {OUTPUT_CSV}.")
+            print("It is probably open in Excel. Please close it and try again.")
+            browser.close()
+            sys.exit(1)
         writer   = csv.DictWriter(
             csv_file,
             fieldnames=["filename", "url", "text", "meeting", "meeting_url"]
