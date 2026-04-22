@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """
-STEP 2: Read links.csv produced by step1_get_links.py and download each PDF.
+STEP 2: Read a links CSV and download each PDF.
+
+Usage:
+    python step2_download.py                        # reads links.csv (default)
+    python step2_download.py --csv boe_links.csv    # reads a different CSV
 
 Requirements:
     pip install requests
 """
 
+import argparse
 import csv
 import re
 import sys
@@ -33,8 +38,13 @@ def sanitize(name: str) -> str:
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--csv", default=str(INPUT_CSV), help="Path to the links CSV file")
+    args = parser.parse_args()
+    INPUT_CSV = Path(args.csv)
+
     if not INPUT_CSV.exists():
-        print(f"{INPUT_CSV} not found. Run step1_get_links.py first.")
+        print(f"{INPUT_CSV} not found. Run the appropriate step1 script first.")
         sys.exit(1)
 
     with open(INPUT_CSV, newline="", encoding="utf-8") as f:
