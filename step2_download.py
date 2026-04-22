@@ -3,11 +3,8 @@
 STEP 2: Read a links CSV and download each PDF.
 
 Usage:
-    python step2_download.py                        # reads links.csv (default)
-    python step2_download.py --csv boe_links.csv    # reads a different CSV
-
-Requirements:
-    pip install requests
+    python step2_download.py                                   # links.csv → pdfs/
+    python step2_download.py --csv boe_links.csv --outdir boepdfs
 """
 
 import argparse
@@ -39,9 +36,11 @@ def sanitize(name: str) -> str:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--csv", default=str(INPUT_CSV), help="Path to the links CSV file")
+    parser.add_argument("--csv",    default=str(INPUT_CSV),  help="Path to the links CSV file")
+    parser.add_argument("--outdir", default=str(OUTPUT_DIR), help="Folder to save PDFs into")
     args = parser.parse_args()
-    input_csv = Path(args.csv)
+    input_csv  = Path(args.csv)
+    output_dir = Path(args.outdir)
 
     if not input_csv.exists():
         print(f"{input_csv} not found. Run the appropriate step1 script first.")
@@ -51,11 +50,11 @@ def main():
         rows = list(csv.DictReader(f))
 
     if not rows:
-        print(f"{INPUT_CSV} is empty.")
+        print(f"{input_csv} is empty.")
         sys.exit(1)
 
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    print(f"Downloading {len(rows)} PDF(s) to ./{OUTPUT_DIR}/\n")
+    output_dir.mkdir(exist_ok=True)
+    print(f"Downloading {len(rows)} PDF(s) to ./{output_dir}/\n")
 
     session = requests.Session()
     success, failed = 0, 0
@@ -65,17 +64,20 @@ def main():
         url  = row["url"]
         text = row.get("text", "")
 
-        # Prefer the URL filename; fall back to link text; last resort: index
-        url_name = url.rsplit("/", 1)[-1].split("?")[0]
-        if url_name.lower().endswith(".pdf"):
-            base = sanitize(url_name[:-4])  # strip .pdf, re-add below
-        elif text:
-            base = sanitize(text)
+        # Use explicit filename from CSV if provided (e.g. date-stamped names
+        # written by boe_all_months_step1.py); otherwise derive from URL/text.
+        if row.get("filename"):
+            base = sanitize(row["filename"].removesuffix(".pdf"))
         else:
-            base = f"document_{i}"
+            url_name = url.rsplit("/", 1)[-1].split("?")[0]
+            if url_name.lower().endswith(".pdf"):
+                base = sanitize(url_name[:-4])
+            elif text:
+                base = sanitize(text)
+            else:
+                base = f"document_{i}"
 
-        # Resolve collisions: if this base name was already used this run,
-        # append a counter so nothing gets silently overwritten
+        # Resolve collisions within this run
         candidate = base + ".pdf"
         counter = 2
         while candidate in used_filenames:
@@ -84,13 +86,13 @@ def main():
         filename = candidate
         used_filenames.add(filename)
 
-        dest = OUTPUT_DIR / filename
+        dest = output_dir / filename
         tmp  = dest.with_suffix(".tmp")
 
         if dest.exists():
             with open(dest, "rb") as f:
                 if f.read(5) == b"%PDF-":
-                    print(f"[{i}/{len(rows)}] Skipping (already downloaded): {filename}")
+                    print(f"[{i}/{len(rows)}] Skipping (exists): {filename}")
                     success += 1
                     continue
 
