@@ -88,8 +88,8 @@ def months_range(start: date, end: date):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--start", default="2005-01",
-                        help="Earliest year-month to check, e.g. 2010-06 (default: 2005-01)")
+    parser.add_argument("--start", default="2022-09",
+                        help="Earliest year-month to check, e.g. 2022-09 (default: 2022-09)")
     args = parser.parse_args()
 
     try:
