@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 *.tmp
 pdfs/
+boepdfs/
+procurement_pages/
 boe_links.csv
 links.csv
 page_debug.html
