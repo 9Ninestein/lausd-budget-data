@@ -3,6 +3,7 @@ __pycache__/
 *.tmp
 pdfs/
 boepdfs/
+boepdfs_tabs/
 procurement_pages/
 boe_links.csv
 links.csv
