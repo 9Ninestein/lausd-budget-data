@@ -38,14 +38,7 @@ DATE_RE = re.compile(
     r"|September|October|November|December)"
     r"\s+(\d{1,2}),?\s+(\d{4})\b"
 )
-# Matches tab separator pages in two formats observed across meeting years:
-#   Old: "TAB 3"
-#   New: "TAB 3\nReturn to Order of Business\n32"
-#         or "1\nTAB 1\nReturn to Order of Business\n18"  (leading page number)
-TAB_RE = re.compile(
-    r"^(?:\d+\n)?Tab\s+(\d+)(?:\nReturn to Order of Business\n\d+)?$",
-    re.I,
-)
+TAB_LABEL_RE = re.compile(r"\bTab\s+(\d+)\b", re.I)
 SOURCE_NUM_RE = re.compile(r"\((\d+)\)")  # extracts N from filename "(N)"
 
 
@@ -56,12 +49,36 @@ def date_slug(text: str) -> str | None:
     return f"{m.group(3)}-{MONTH_MAP[m.group(1)]}-{int(m.group(2)):02d}"
 
 
+def tab_number(page_text: str) -> int | None:
+    """Return the tab number if this page is a tab separator, else None.
+
+    Tab separator pages contain 'TAB N' and nothing else meaningful —
+    only optional boilerplate like page numbers or 'Return to Order of
+    Business'. We detect them by stripping all known boilerplate and
+    checking that nothing substantive remains.  This handles every
+    ordering variant seen across meeting years:
+      - 'TAB 3'
+      - 'TAB 3\\nReturn to Order of Business\\n32'
+      - '1\\nTAB 1\\nReturn to Order of Business\\n18'
+      - 'TAB 2\\n20\\nReturn to Order of Business'
+    """
+    m = TAB_LABEL_RE.search(page_text)
+    if not m:
+        return None
+    leftover = TAB_LABEL_RE.sub("", page_text)
+    leftover = re.sub(r"Return to Order of Business", "", leftover, flags=re.I)
+    leftover = re.sub(r"\d+", "", leftover)
+    if leftover.strip():
+        return None  # real content remains — not a tab separator page
+    return int(m.group(1))
+
+
 def find_tab_pages(doc) -> list[tuple[int, int]]:
     result = []
     for i, page in enumerate(doc):
-        m = TAB_RE.match(page.get_text().strip())
-        if m:
-            result.append((i, int(m.group(1))))
+        n = tab_number(page.get_text().strip())
+        if n is not None:
+            result.append((i, n))
     return result
 
 
