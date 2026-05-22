@@ -38,7 +38,14 @@ DATE_RE = re.compile(
     r"|September|October|November|December)"
     r"\s+(\d{1,2}),?\s+(\d{4})\b"
 )
-TAB_RE = re.compile(r"^Tab\s+(\d+)$", re.I)
+# Matches tab separator pages in two formats observed across meeting years:
+#   Old: "TAB 3"
+#   New: "TAB 3\nReturn to Order of Business\n32"
+#         or "1\nTAB 1\nReturn to Order of Business\n18"  (leading page number)
+TAB_RE = re.compile(
+    r"^(?:\d+\n)?Tab\s+(\d+)(?:\nReturn to Order of Business\n\d+)?$",
+    re.I,
+)
 SOURCE_NUM_RE = re.compile(r"\((\d+)\)")  # extracts N from filename "(N)"
 
 
