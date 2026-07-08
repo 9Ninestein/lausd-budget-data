@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 *.tmp
+*.xlsx
 pdfs/
 boepdfs/
 procurement_pages/
